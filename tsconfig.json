@@ -1,0 +1,35 @@
+{
+  "include": ["src"],
+  "compilerOptions": {
+    "noImplicitAny": true,
+    "removeComments": true,
+    "preserveConstEnums": true,
+    "module": "ESNext",
+    "esModuleInterop": true,
+    "target": "ES5",
+    "moduleResolution": "node",
+    "sourceMap": true,
+    "outDir": "./dist/",
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "allowJs": true,
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "noFallthroughCasesInSwitch": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    
+    "lib": [
+      "DOM",
+      "ESNext",
+      "DOM.Iterable",
+    ],
+  },
+  
+  "exclude": [
+    "node_modules",
+    "dist",
+    "esm"
+  ],  
+}

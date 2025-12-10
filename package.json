@@ -1,0 +1,39 @@
+{
+  "name": "firebase-client-ql",
+  "version": "4.0.1",
+  "description": "firebase library for SQL users",
+  "main": "dist/index.js",
+  "module": "esm/index.js",
+  "files": [
+    "dist",
+    "esm",
+    "src"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/breedware/fire-client-ql.git"
+  },
+  "author": "Breedware Limited <breedware@gmail.com>",
+  "license": "MIT",
+  "private": false,
+  "dependencies": { },
+  "peerDependencies": {
+    "firebase": ">=12"
+  },
+  "scripts": {
+    "clean": "rimraf dist",
+    "prebuild": "npm run clean",
+    "build": "npm run build:esm && npm run build:cjs",
+    "build:cjs": "tsc --module commonjs --outDir dist",
+    "build:esm": "tsc --target esnext --outDir esm",
+    "preversion": "npm run build",
+    "postversion": "git push --follow-tags"
+  },
+  "prepublish": "tsc",
+  "types": "dist/index.d.ts",
+  "devDependencies": {
+    "rimraf": "^5.0.1",
+    "source-map-loader": "^4.0.1",
+    "typescript": "^5.1.6"
+  }
+}
