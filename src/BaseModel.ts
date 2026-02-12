@@ -1,3 +1,4 @@
+import { FirebaseApp } from "@firebase/app";
 import { Firestore, 
     DocumentData, doc, 
     collection, DocumentReference, 
@@ -10,12 +11,14 @@ import { Firestore,
     or,
     and,
     QueryCompositeFilterConstraint,
-    FieldValue,
     arrayUnion,
-    arrayRemove
+    arrayRemove,
+    getFirestore
 } from "firebase/firestore";
 import { Model } from "./ModelInterface";
 import { andOrWhereClause, dbItems, whereClause } from "./constants";
+import { API } from "./api.server";
+import { errorLogger } from "./helpers";
 
 export class BaseModel implements Model {
 
@@ -28,13 +31,46 @@ export class BaseModel implements Model {
 
     // Database table name
     private table: string = '';
+    private app: FirebaseApp;
 
     // offset data
     // offset?: QueryDocumentSnapshot<DocumentData>;
 
-    constructor(table: string, db: Firestore){
+    constructor(table: string, app: FirebaseApp){
         this.table = table
-        this.firestorDB = db
+        this.firestorDB = getFirestore(app);
+        this.app = app;
+    }
+
+    // call cloud functions
+    async postData(formData: Record<string, any>, method: string, additionInformation?: any): Promise<any>{
+        try {
+            const server = new API({method, data: {formData, additionInformation}, app: this.app});
+            return await server.call();
+        } catch (error) {
+            errorLogger("postData: ", error);
+            return false;
+        }
+    }
+
+    /**
+     * Fetch current server time from your backend API
+     * @returns number (timestamp) | null
+     */
+    async fetchServerTime(): Promise<number | null> {
+        try {
+            const server = new API({method: 'fetchServerTime', app: this.app});
+            const response = await server.call();
+
+            if (response?.data) {
+                return response.data as number;
+            }
+
+            return null;
+        } catch (error) {
+            errorLogger("fetchServerTime Error: ", error);
+            return null;
+        }
     }
 
 
