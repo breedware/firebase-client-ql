@@ -1,3 +1,4 @@
+import { FirebaseApp } from "@firebase/app";
 import { 
             FirebaseStorage, 
             ref, 
@@ -5,7 +6,8 @@ import {
             uploadString, 
             getDownloadURL, 
             uploadBytesResumable, 
-            deleteObject
+            deleteObject,
+            getStorage
         } from "firebase/storage"
 import { UPLOADTYPES } from "./constants"
 import { generateRandomString } from "./helpers"
@@ -22,10 +24,10 @@ export class StorageUpload {
     private storage: FirebaseStorage
 
     
-    constructor(props: {storage: FirebaseStorage, file: File | string, basePath: UPLOADTYPES, otherPath: string, maxSize?: number}){
-        const {file,  basePath,  otherPath, maxSize, storage} = props
+    constructor(props: {app: FirebaseApp, file: File | string, basePath: UPLOADTYPES, otherPath: string, maxSize?: number}){
+        const {file,  basePath,  otherPath, maxSize, app} = props
         // storage object
-        this.storage =  storage;
+        this.storage =  getStorage(app);
        if(file){
         // set user additional path
         this.additionalPath = otherPath
