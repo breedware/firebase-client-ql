@@ -43,9 +43,9 @@ export class BaseModel implements Model {
     }
 
     // call cloud functions
-    async postData(formData: Record<string, any>, method: string, additionInformation?: any): Promise<any>{
+    async postData(formData: Record<string, any>, method: string, additionInformation?: Record<string, any>): Promise<any>{
         try {
-            const server = new API({method, data: {formData, additionInformation}, app: this.app});
+            const server = new API({method, data: {formData, ...additionInformation}, app: this.app});
             return await server.call();
         } catch (error) {
             errorLogger("postData: ", error);
