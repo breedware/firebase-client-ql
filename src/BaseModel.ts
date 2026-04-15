@@ -19,6 +19,7 @@ import { Model } from "./ModelInterface";
 import { andOrWhereClause, dbItems, whereClause } from "./constants";
 import { API } from "./api.server";
 import { errorLogger } from "./helpers";
+import { Functions } from "firebase/functions";
 
 export class BaseModel implements Model {
 
@@ -33,19 +34,23 @@ export class BaseModel implements Model {
     private table: string = '';
     private app: FirebaseApp;
 
+    // functions
+    private funcInstance?: Functions;
+
     // offset data
     // offset?: QueryDocumentSnapshot<DocumentData>;
 
-    constructor(table: string, app: FirebaseApp){
+    constructor(table: string, app: FirebaseApp, functionInstance: Functions){
         this.table = table
         this.firestorDB = getFirestore(app);
         this.app = app;
+        this.funcInstance = functionInstance
     }
 
     // call cloud functions
     async postData(formData: Record<string, any>, method: string, additionInformation?: Record<string, any>): Promise<any>{
         try {
-            const server = new API({method, data: {formData, ...additionInformation}, app: this.app});
+            const server = new API({method, data: {formData, ...additionInformation}, functionInstance: this.funcInstance!});
             return await server.call();
         } catch (error) {
             errorLogger("postData: ", error);
@@ -59,7 +64,7 @@ export class BaseModel implements Model {
      */
     async fetchServerTime(): Promise<number | null> {
         try {
-            const server = new API({method: 'fetchServerTime', app: this.app});
+            const server = new API({method: 'fetchServerTime', functionInstance: this.funcInstance!});
             const response = await server.call();
 
             if (response?.data) {

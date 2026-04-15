@@ -1,5 +1,5 @@
 import { FirebaseApp } from "@firebase/app";
-import { getFunctions, httpsCallable } from "firebase/functions";
+import { Functions, getFunctions, httpsCallable } from "firebase/functions";
 import { getSystemInfo } from "./system.info";
 
 export interface APIReturn {
@@ -11,7 +11,7 @@ export interface APIReturn {
 interface ApiProps {
     method: string;
     data?: any;
-    app: FirebaseApp;
+    functionInstance: Functions;
 }
 
 
@@ -21,8 +21,8 @@ export class API {
     private data;
     private func;
 
-    constructor ({method, data, app}: ApiProps) {
-        this.method = httpsCallable(getFunctions(app), method);
+    constructor ({method, data, functionInstance}: ApiProps) {
+        this.method = httpsCallable(functionInstance, method);
         this.data = data;
         this.func = method;
     }
