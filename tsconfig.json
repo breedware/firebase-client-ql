@@ -1,35 +1,35 @@
 {
-  "include": ["src"],
   "compilerOptions": {
-    "noImplicitAny": true,
-    "removeComments": true,
-    "preserveConstEnums": true,
     "module": "ESNext",
-    "esModuleInterop": true,
-    "target": "ES5",
-    "moduleResolution": "node",
-    "sourceMap": true,
-    "outDir": "./dist/",
-    "strict": true,
-    "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "allowJs": true,
-    "skipLibCheck": true,
-    "allowSyntheticDefaultImports": true,
-    "noFallthroughCasesInSwitch": true,
+    "moduleResolution": "Bundler", // Modern replacement for 'node'
+    "target": "ES2016",
+    
+    /* These are often required when using 'Bundler' */
+    "allowImportingTsExtensions": false, 
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "noEmit": false, // Set to true if only using TS for type checking
+
+    /* Base Options */
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
     
-    "lib": [
-      "DOM",
-      "ESNext",
-      "DOM.Iterable",
-    ],
+    /* Build Options */
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "sourceMap": true,
+    "declaration": true,
+    "removeComments": true,
+    "preserveConstEnums": true,
+    
+    "noImplicitAny": true,
+    "noFallthroughCasesInSwitch": true
   },
-  
-  "exclude": [
-    "node_modules",
-    "dist",
-    "esm"
-  ],  
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "esm"]
 }

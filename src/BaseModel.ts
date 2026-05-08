@@ -19,7 +19,7 @@ import { Model } from "./ModelInterface";
 import { andOrWhereClause, dbItems, whereClause } from "./constants";
 import { API } from "./api.server";
 import { errorLogger } from "./helpers";
-import { Functions } from "firebase/functions";
+import {  getFunctions } from "firebase/functions";
 
 export class BaseModel implements Model {
 
@@ -33,24 +33,20 @@ export class BaseModel implements Model {
     // Database table name
     private table: string = '';
     private app: FirebaseApp;
+    private functionRegion?: string;
 
-    // functions
-    private funcInstance?: Functions;
 
-    // offset data
-    // offset?: QueryDocumentSnapshot<DocumentData>;
-
-    constructor(table: string, app: FirebaseApp, functionInstance: Functions){
+    constructor(table: string, app: FirebaseApp, functionRegion?: string){
         this.table = table
         this.firestorDB = getFirestore(app);
         this.app = app;
-        this.funcInstance = functionInstance
+        this.functionRegion = functionRegion;
     }
 
     // call cloud functions
     async postData(formData: Record<string, any>, method: string, additionInformation?: Record<string, any>): Promise<any>{
         try {
-            const server = new API({method, data: {formData, ...additionInformation}, functionInstance: this.funcInstance!});
+            const server = new API({method, data: {formData, ...additionInformation}, functionInstance: getFunctions(this.app, this.functionRegion)});
             return await server.call();
         } catch (error) {
             errorLogger("postData: ", error);
@@ -64,7 +60,7 @@ export class BaseModel implements Model {
      */
     async fetchServerTime(): Promise<number | null> {
         try {
-            const server = new API({method: 'fetchServerTime', functionInstance: this.funcInstance!});
+            const server = new API({method: 'fetchServerTime', functionInstance: getFunctions(this.app, this.functionRegion)});
             const response = await server.call();
 
             if (response?.data) {

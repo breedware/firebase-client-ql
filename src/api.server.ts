@@ -1,5 +1,4 @@
-import { FirebaseApp } from "@firebase/app";
-import { Functions, getFunctions, httpsCallable } from "firebase/functions";
+import { Functions, httpsCallable } from "firebase/functions";
 import { getSystemInfo } from "./system.info";
 
 export interface APIReturn {
