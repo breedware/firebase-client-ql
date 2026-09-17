@@ -1,32 +1,25 @@
 {
   "compilerOptions": {
-    "module": "ESNext",
-    "moduleResolution": "Bundler", // Modern replacement for 'node'
-    "target": "ES2016",
-    
-    /* These are often required when using 'Bundler' */
+    "target": "ES2022",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "allowImportingTsExtensions": false, 
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": false, // Set to true if only using TS for type checking
-
-    /* Base Options */
-    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "noEmit": false,
+    "lib": ["DOM", "DOM.Iterable", "ESNext", "ES2022"],
     "allowJs": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "forceConsistentCasingInFileNames": true,
-    
-    /* Build Options */
     "outDir": "./dist",
     "rootDir": "./src",
     "sourceMap": true,
     "declaration": true,
     "removeComments": true,
     "preserveConstEnums": true,
-    
     "noImplicitAny": true,
     "noFallthroughCasesInSwitch": true
   },

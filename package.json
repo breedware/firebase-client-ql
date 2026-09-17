@@ -1,6 +1,6 @@
 {
   "name": "firebase-client-ql",
-  "version": "7.2.0",
+  "version": "8.0.0",
   "description": "firebase library for SQL users",
   "main": "dist/index.js",
   "module": "esm/index.js",
@@ -21,13 +21,13 @@
     "firebase": ">=12"
   },
   "scripts": {
-    "clean": "rimraf dist",
     "prebuild": "npm run clean",
-    "build": "npm run build:esm && npm run build:cjs",
-    "build:cjs": "tsc --module commonjs --outDir dist",
-    "build:esm": "tsc --target esnext --outDir esm",
     "preversion": "npm run build",
-    "postversion": "git push --follow-tags"
+    "postversion": "git push --follow-tags",
+    "clean": "rimraf dist esm",
+    "build": "npm run build:esm && npm run build:cjs",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:esm": "tsc -p tsconfig.esm.json"
   },
   "prepublish": "tsc",
   "types": "dist/index.d.ts",
@@ -36,4 +36,6 @@
     "source-map-loader": "^4.0.1",
     "typescript": "^5.1.6"
   }
+
+  
 }

@@ -36,9 +36,9 @@ export class BaseModel implements Model {
     private functionRegion?: string;
 
 
-    constructor(table: string, app: FirebaseApp, functionRegion?: string){
+    constructor(table: string, app: FirebaseApp, functionRegion?: string, dbId?: string){
         this.table = table
-        this.firestorDB = getFirestore(app);
+        this.firestorDB = getFirestore(app, dbId ?? '(default)');
         this.app = app;
         this.functionRegion = functionRegion;
     }
