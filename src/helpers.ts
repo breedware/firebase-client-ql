@@ -1,4 +1,4 @@
-
+import { DocumentData } from "firebase/firestore";
 /**
  * Generates random strings of n length
  * containing 0-9 and Aa-Zz
@@ -420,5 +420,53 @@ export const getInitials = (fullName?: string): string => {
   export const formHasError = (formError: Record<string, string | undefined>): boolean =>{
     return Object.values(formError).every(item=>item!==undefined);
   }
+
+
+/**
+ * Recursively converts all `undefined` values in an object or array to `null`.
+ * Safe for special Firestore objects (Timestamp, DocumentReference, etc.).
+ *
+ * @param obj - The document object or payload to sanitize.
+ * @returns The sanitized object with `undefined` replaced by `null`.
+ */
+export function sanitizeFirestoreData<T = DocumentData>(obj: any): T {
+    // Return primitives, null, and non-objects as-is
+    if (obj === null || typeof obj !== 'object') {
+        return obj;
+    }
+
+    // Preserve special Firestore objects (Timestamp, GeoPoint, DocumentReference, FieldValue, Date)
+    // Checking constructor name prevents breaking internal class structures
+    if (
+        obj.constructor && 
+        obj.constructor.name !== 'Object' && 
+        obj.constructor.name !== 'Array'
+    ) {
+        return obj;
+    }
+
+    // Handle Arrays recursively
+    if (Array.isArray(obj)) {
+        return obj.map((item) => {
+            if (item === undefined) return null;
+            return sanitizeFirestoreData(item);
+        }) as unknown as T;
+    }
+
+    // Handle Objects recursively
+    const sanitized: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(obj)) {
+        if (value === undefined) {
+            sanitized[key] = null;
+        } else if (typeof value === 'object' && value !== null) {
+            sanitized[key] = sanitizeFirestoreData(value);
+        } else {
+            sanitized[key] = value;
+        }
+    }
+
+    return sanitized as T;
+}
 
 

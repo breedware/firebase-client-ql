@@ -1,11 +1,27 @@
 import { FirebaseApp } from "@firebase/app";
-import { Firestore, 
-    DocumentData, doc, 
-    collection, DocumentReference, 
-    CollectionReference, onSnapshot, where, 
-    QueryConstraint, orderBy, getDoc, startAfter, 
-    limit, query, updateDoc, getDocs, addDoc, 
-    setDoc, deleteDoc, increment, getCountFromServer, 
+import { 
+    Firestore, 
+    DocumentData, 
+    doc, 
+    collection, 
+    DocumentReference, 
+    CollectionReference, 
+    onSnapshot, 
+    where, 
+    QueryConstraint, 
+    QueryNonFilterConstraint,
+    orderBy, 
+    getDoc, 
+    startAfter, 
+    limit, 
+    query, 
+    updateDoc, 
+    getDocs, 
+    addDoc, 
+    setDoc, 
+    deleteDoc, 
+    increment, 
+    getCountFromServer, 
     writeBatch,
     QueryFieldFilterConstraint,
     or,
@@ -13,40 +29,38 @@ import { Firestore,
     QueryCompositeFilterConstraint,
     arrayUnion,
     arrayRemove,
-    getFirestore
+    Unsubscribe,
 } from "firebase/firestore";
 import { Model } from "./ModelInterface";
 import { andOrWhereClause, dbItems, whereClause } from "./constants";
 import { API } from "./api.server";
-import { errorLogger } from "./helpers";
-import {  getFunctions } from "firebase/functions";
+import { errorLogger, sanitizeFirestoreData } from "./helpers";
+import { getFunctions } from "firebase/functions";
 
 export class BaseModel implements Model {
 
-    // current data returned from firestore
     data: any;
 
-    private firestorDB?: Firestore
-    // Get a new write batch
-    // protected batch?: WriteBatch
-
-    // Database table name
+    private firestoreDB: Firestore;
     private table: string = '';
     private app: FirebaseApp;
     private functionRegion?: string;
 
-
-    constructor(table: string, app: FirebaseApp, functionRegion?: string, dbId?: string){
-        this.table = table
-        this.firestorDB = getFirestore(app, dbId ?? '(default)');
+    constructor(table: string, app: FirebaseApp, db: Firestore, functionRegion?: string){
+        this.table = table;
+        this.firestoreDB = db;
         this.app = app;
         this.functionRegion = functionRegion;
     }
 
-    // call cloud functions
+    // Call Cloud Functions
     async postData(formData: Record<string, any>, method: string, additionInformation?: Record<string, any>): Promise<any>{
         try {
-            const server = new API({method, data: {formData, ...additionInformation}, functionInstance: getFunctions(this.app, this.functionRegion)});
+            const server = new API({
+                method, 
+                data: { formData, ...additionInformation }, 
+                functionInstance: getFunctions(this.app, this.functionRegion)
+            });
             return await server.call();
         } catch (error) {
             errorLogger("postData: ", error);
@@ -54,542 +68,465 @@ export class BaseModel implements Model {
         }
     }
 
-    /**
-     * Fetch current server time from your backend API
-     * @returns number (timestamp) | null
-     */
     async fetchServerTime(): Promise<number | null> {
         try {
-            const server = new API({method: 'fetchServerTime', functionInstance: getFunctions(this.app, this.functionRegion)});
+            const server = new API({
+                method: 'fetchServerTime', 
+                functionInstance: getFunctions(this.app, this.functionRegion)
+            });
             const response = await server.call();
-
-            if (response?.data) {
-                return response.data as number;
-            }
-
-            return null;
+            return response?.data ? (response.data as number) : null;
         } catch (error) {
             errorLogger("fetchServerTime Error: ", error);
             return null;
         }
     }
 
-
-    /**
-     * save multiple documents
-     * @param param0 
-     */
-    async saveBatch ({ data }: { data: object[]}): Promise<boolean> {
+    // Save batch (Handles Firestore's 500 operation batch limit)
+    async saveBatch({ data }: { data: object[] }): Promise<boolean> {
         try {
-            const batch = writeBatch(this.firestorDB!)
-            const obj = data as dbItems[]
-            obj.forEach((document)=>{
-                const docRef = document.reference? 
-                doc(this.firestorDB!, this.table, document.reference): 
-                doc(collection(this.firestorDB!, this.table))
-                if(document.reference){
-                    delete document.reference
-                }
-                
-                batch.set(docRef, document)
-            })
-            await batch.commit()
-            return true
+            const obj = data as dbItems[];
+            const BATCH_SIZE = 500;
+
+            for (let i = 0; i < obj.length; i += BATCH_SIZE) {
+                const chunk = obj.slice(i, i + BATCH_SIZE);
+                const batch = writeBatch(this.firestoreDB);
+
+                chunk.forEach((document) => {
+                    // Clone object to avoid mutating parameter state in place
+                    const docData = { ...sanitizeFirestoreData(document) };
+                    const ref = docData.reference;
+                    delete docData.reference;
+
+                    const docRef = ref 
+                        ? doc(this.firestoreDB, this.table, ref) 
+                        : doc(collection(this.firestoreDB, this.table));
+                    
+                    batch.set(docRef, docData);
+                });
+
+                await batch.commit();
+            }
+            return true;
         } catch (error) {
-            throw new Error(`saveBatch: , ${error}`)
+            errorLogger("saveBatch Error: ", error);
+            throw new Error(`saveBatch failed: ${error}`);
         }
     }
 
-    /**
-     * update multiple documents
-     * @param param0 
-     */
+    // Update batch
     async updateBatch({ data }: { data: object[] }): Promise<boolean> {
         try {
-            const batch = writeBatch(this.firestorDB!)
-            const obj = data as dbItems[]
-            obj.forEach((document)=>{
-                const docRef = doc(this.firestorDB!, this.table, document.reference!)
-                delete document.reference
-                batch.update(docRef, document as object)
-            })
-            await batch.commit()
-            return true
+            const obj = data as dbItems[];
+            const BATCH_SIZE = 500;
+
+            for (let i = 0; i < obj.length; i += BATCH_SIZE) {
+                const chunk = obj.slice(i, i + BATCH_SIZE);
+                const batch = writeBatch(this.firestoreDB);
+
+                chunk.forEach((document) => {
+                    const docData = { ...sanitizeFirestoreData(document) };
+                    const ref = docData.reference;
+                    
+                    if (!ref) {
+                        throw new Error("Missing 'reference' property for batch update item.");
+                    }
+                    
+                    delete docData.reference;
+                    const docRef = doc(this.firestoreDB, this.table, ref);
+                    batch.update(docRef, docData);
+                });
+
+                await batch.commit();
+            }
+            return true;
         } catch (error) {
-            throw new Error(`updateBatch: , ${error}`)
+            errorLogger("updateBatch Error: ", error);
+            throw new Error(`updateBatch failed: ${error}`);
+        }
+    }
+
+    // Delete batch
+    async deleteBatch({ ids }: { ids: string[] }): Promise<boolean> {
+        try {
+            const BATCH_SIZE = 500;
+
+            for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+                const chunk = ids.slice(i, i + BATCH_SIZE);
+                const batch = writeBatch(this.firestoreDB);
+
+                chunk.forEach((id) => {
+                    const docRef = doc(this.firestoreDB, this.table, id);
+                    batch.delete(docRef);
+                });
+
+                await batch.commit();
+            }
+            return true;
+        } catch (error) {
+            errorLogger("deleteBatch Error: ", error);
+            throw new Error(`deleteBatch failed: ${error}`);
         }
     }
 
     /**
-     * delete multiple documents
-     * @param param0 
+     * Get realtime update from the database.
+     * RETURNS Unsubscribe handle to prevent memory leaks!
      */
-    async deleteBatch({ ids }: { ids: string[]  }): Promise<boolean> {
-        try {
-            const batch = writeBatch(this.firestorDB!)
-            ids.forEach((id)=>{
-                const docRef = doc(this.firestorDB!, this.table, id)
-                batch.delete(docRef)
-            })
-            await batch.commit()
-            return true
-        } catch (error) {
-            throw new Error(`deleteBatch: , ${error}`)
-        }
-    }
-
-
-
-    /**
-     * Get realtime update from the database
-     * @param id 
-     */
-    stream(callBack: (data:  DocumentData | DocumentData[] | undefined)=>void, id?: string ): void { 
-    
-        const ref:DocumentReference<DocumentData> | CollectionReference<DocumentData> = id? 
-            doc(this.firestorDB!, this.table, id):
-            collection(this.firestorDB!, this.table)
-        try {
-            if(id){
-                onSnapshot(ref as DocumentReference, (doc) => {
-                    callBack(doc.exists() ? {...doc.data(), reference: ref.id}: undefined)
-                })
-            }else{
-                onSnapshot(ref as CollectionReference, (snapShot) => {
-                    callBack(
-                        snapShot.docs.map((value)=>{
-                            const data = {...value.data(), reference: value.id}
-                            return data
-                        })
-                    )
-                })
-            }
-        } catch (error) {
-            callBack(undefined)
+    stream(callBack: (data: DocumentData | DocumentData[] | undefined) => void, id?: string): Unsubscribe { 
+        if (id) {
+            const ref = doc(this.firestoreDB, this.table, id);
+            return onSnapshot(ref, 
+                (docSnap) => {
+                    callBack(docSnap.exists() ? { ...docSnap.data(), reference: docSnap.id } : undefined);
+                },
+                (error) => {
+                    errorLogger("stream Error: ", error);
+                    callBack(undefined);
+                }
+            );
+        } else {
+            const ref = collection(this.firestoreDB, this.table);
+            return onSnapshot(ref, 
+                (snapShot) => {
+                    callBack(snapShot.docs.map((docItem) => ({ ...docItem.data(), reference: docItem.id })));
+                },
+                (error) => {
+                    errorLogger("stream Error: ", error);
+                    callBack(undefined);
+                }
+            );
         }
     }
 
     /**
-     * Get realtime value from database with where clause
-     * @param wh 
-     * @param lim 
-     * @param order 
+     * Get realtime values from database with where clause.
+     * RETURNS Unsubscribe handle to prevent memory leaks!
      */
-    async streamWhere(wh: whereClause[], callBack: (data: DocumentData[])=>void,  lim?:number, order?: {
-        parameter: string,
-        direction?: 'asc' | 'desc'
-    }, offset?: string): Promise<void> {
+    async streamWhere(
+        wh: whereClause[], 
+        callBack: (data: DocumentData[]) => void, 
+        lim?: number, 
+        order?: { parameter: string; direction?: 'asc' | 'desc' }, 
+        offset?: string
+    ): Promise<Unsubscribe> {
         try {
-            const whereParameter = wh.map(clause=> where(
-                clause.key, 
-                clause.operator, 
-                clause.value))
-            let constraint: QueryConstraint[] = []
-            // add where parameter
-            if(wh){
-                constraint.push(...whereParameter)
+            const constraints: QueryConstraint[] = wh.map(clause => where(clause.key, clause.operator, clause.value));
+            
+            if (order) {
+                constraints.push(orderBy(order.parameter, order.direction));
             }
-            // add order by
-            if(order){
-                constraint.push(orderBy(order.parameter, order.direction))
+            if (offset) {
+                const offDoc = await getDoc(doc(this.firestoreDB, this.table, offset));
+                if (offDoc.exists()) {
+                    constraints.push(startAfter(offDoc));
+                }
             }
-            // add offset
-            if(offset){
-                const off  =  await getDoc(doc(this.firestorDB!, this.table, offset));
-                constraint.push(startAfter(off))
+            if (lim) {
+                constraints.push(limit(lim));
             }
-            // add limit
-            if(lim){
-                // 
-                constraint.push(limit(lim))
-            }
-            const ref: CollectionReference<DocumentData> = collection(this.firestorDB!, this.table, )
-        
-            onSnapshot(query(
-                ref,  
-                ...constraint
-            ), (snapShot) => {
-                callBack(snapShot.docs.map((value)=>{
-                    const data = {...value.data(), reference: value.id}
-                    return data
-                }))
-            })
+
+            const ref = collection(this.firestoreDB, this.table);
+            
+            return onSnapshot(
+                query(ref, ...constraints), 
+                (snapShot) => {
+                    callBack(snapShot.docs.map((item) => ({ ...item.data(), reference: item.id })));
+                },
+                (error) => {
+                    errorLogger("streamWhere listener error: ", error);
+                    callBack([]);
+                }
+            );
         } catch (error) {
-            throw new Error(`streamWhere: , ${error}`)
+            errorLogger("streamWhere execution error: ", error);
+            throw new Error(`streamWhere failed: ${error}`);
         }
     }
 
-    /**
-     * Fetch a single item from database
-     * @param id 
-     */
-    async find(id: string ): Promise< boolean> {
+    async find(id: string): Promise<boolean> {
         try {
-            const ref = doc(this.firestorDB!, this.table, id)
-            const docSnap = await getDoc(ref)
+            const ref = doc(this.firestoreDB, this.table, id);
+            const docSnap = await getDoc(ref);
             if (docSnap.exists()) {
-                this.data = {...docSnap.data(), reference: id};
+                this.data = { ...docSnap.data(), reference: id };
                 return true;
             } 
-            return false
+            this.data = null;
+            return false;
         } catch (error) {
-            throw new Error(`find: , ${error}`)
+            errorLogger("find Error: ", error);
+            throw new Error(`find failed: ${error}`);
         }
     }
 
-    /**
-     * check if data exists
-     * @param id 
-     * @returns 
-     */
     async dataExists(id: string): Promise<boolean> {
         try {
-            const ref = doc(this.firestorDB!, this.table, id);
-            const docSanp = await getDoc(ref);
-            return docSanp.exists()
+            const ref = doc(this.firestoreDB, this.table, id);
+            const docSnap = await getDoc(ref);
+            return docSnap.exists();
         } catch (error) {
-            throw new Error(`dataExists: , ${error}`)
+            errorLogger("dataExists Error: ", error);
+            throw new Error(`dataExists failed: ${error}`);
         }
     }
 
-    /**
-     * Update part of a data
-     * @param data 
-     * @param id 
-     * @returns 
-     */
     async update(data: any, id: string): Promise<boolean> {
         try {
-            delete data.reference
-            const docRef = doc(this.firestorDB!, this.table, id)
-            await updateDoc(docRef, data)
-            return true
+            const updatePayload = { ...sanitizeFirestoreData(data) };
+            delete updatePayload.reference;
+
+            const docRef = doc(this.firestoreDB, this.table, id);
+            await updateDoc(docRef, updatePayload);
+            return true;
         } catch (error) {
-            throw new Error(`update: , ${error}`)
+            errorLogger("update Error: ", error);
+            throw new Error(`update failed: ${error}`);
         }
     }
 
-    /**
-     * update an array in a document
-     * @param {Array<any>} data array of data to be saved
-     * @param {string} id document reference
-     * @param {string} key key to reference
-     * @returns {boolean}
-     */
     async updateAtomicArray(data: any[], id: string, key: string): Promise<boolean> {
         try {
-            const docRef = doc(this.firestorDB!, this.table, id);
-            await updateDoc(docRef, {[key]: arrayUnion(...data)});
+            const docRef = doc(this.firestoreDB, this.table, id);
+            await updateDoc(docRef, { [key]: arrayUnion(...data) });
             return true;
         } catch (error) {
-            throw new Error(`updateAtomicArray error: ${error}`);
+            errorLogger("updateAtomicArray Error: ", error);
+            throw new Error(`updateAtomicArray failed: ${error}`);
         }
     }
 
-    /**
-     * removes items from document array
-     * @param {Array<any>} data array of data to be removed
-     * @param {string} id document reference
-     * @param {string} key key to reference
-     * @returns {boolean}
-     */
     async removeFromArray(data: any[], id: string, key: string): Promise<boolean> {
         try {
-            const docRef = doc(this.firestorDB!, this.table, id);
-            await updateDoc(docRef, {[key]: arrayRemove(...data)});
+            const docRef = doc(this.firestoreDB, this.table, id);
+            await updateDoc(docRef, { [key]: arrayRemove(...data) });
             return true;
         } catch (error) {
-            throw new Error(`updateAtomicArray error: ${error}`);
+            errorLogger("removeFromArray Error: ", error);
+            throw new Error(`removeFromArray failed: ${error}`);
         }
     }
 
-    /**
-     * Get all items from database
-     * @returns void
-     */
-    async findAll(ids?: string[]) : Promise<boolean> {
+    async findAll(ids?: string[]): Promise<boolean> {
         try {
-            const colRef = collection(this.firestorDB!, this.table)
-            if(ids){
-                const results: DocumentData[] = []
-                for (let id of ids){
-                    const found = await this.find(id)
-                    if(found){
-                        results.push(this.data as DocumentData)
+            if (ids && ids.length > 0) {
+                const results: DocumentData[] = [];
+                for (const id of ids) {
+                    const found = await this.find(id);
+                    if (found && this.data) {
+                        results.push(this.data as DocumentData);
                     }
                 }
                 this.data = results;
-                return true
+                return results.length > 0;
             } else {
-                const snaptshots =  await getDocs(colRef)
-                if(!snaptshots.empty){
-                    this.data =  snaptshots.docs.map((document)=>{
-                        return {...document.data(), reference: document.id}
-                    })
+                const colRef = collection(this.firestoreDB, this.table);
+                const snapshots = await getDocs(colRef);
+                if (!snapshots.empty) {
+                    this.data = snapshots.docs.map((docItem) => ({ ...docItem.data(), reference: docItem.id }));
                     return true;
-                }else{
+                } else {
+                    this.data = [];
                     return false;
                 }
             }
-            
         } catch (error) {
-            throw new Error(`findAll: , ${error}`)
+            errorLogger("findAll Error: ", error);
+            throw new Error(`findAll failed: ${error}`);
         }
     }
 
-    /**
-     * perform complex query
-     * @param param0 
-     */
-    async findWhereOrAnd( {wh, lim, order, offset}:  {
+    async findWhereOrAnd({ wh, lim, order, offset }: {
         wh?: {
-            type: 'or'| 'and' | 'andOr',
-            parameter: andOrWhereClause[]
-        }, 
-        lim?:number, 
-        order?:{
-            parameter: string,
-            direction?: 'asc' | 'desc'
-        }, 
-        offset?: string
+            type: 'or' | 'and' | 'andOr';
+            parameter: andOrWhereClause[];
+        }; 
+        lim?: number; 
+        order?: {
+            parameter: string;
+            direction?: 'asc' | 'desc';
+        }; 
+        offset?: string;
     }): Promise<boolean> {
         try {
-            // get Collection reference
-            const colRef = collection(this.firestorDB!, this.table)
-            // set where clause
+            const colRef = collection(this.firestoreDB, this.table);
             const andWhere: QueryFieldFilterConstraint[] = [];
             const orWhere: QueryFieldFilterConstraint[] = [];
-            let filterConstraint: QueryCompositeFilterConstraint = and();
+            let filterConstraint: QueryCompositeFilterConstraint | null = null;
 
-            // add where parameter
-            if(wh){
-                wh.parameter.forEach((clause)=>{
-                    const whe = where(
-                        clause.key, 
-                        clause.operator, 
-                        clause.value
-                    )
-                    clause.type === 'and' ?
-                    andWhere.push(whe) : orWhere.push(whe)
-                })
+            if (wh && wh.parameter.length > 0) {
+                wh.parameter.forEach((clause) => {
+                    const whe = where(clause.key, clause.operator, clause.value);
+                    clause.type === 'and' ? andWhere.push(whe) : orWhere.push(whe);
+                });
 
-                if(wh.type==='andOr'){
-                    filterConstraint = and(...andWhere, or(...orWhere))
-                } else if(wh.type === 'or') {
-                    filterConstraint = or(...orWhere)
-                } else {
-                    filterConstraint = and(...andWhere)
+                if (wh.type === 'andOr' && andWhere.length > 0 && orWhere.length > 0) {
+                    filterConstraint = and(...andWhere, or(...orWhere));
+                } else if (wh.type === 'or' && orWhere.length > 0) {
+                    filterConstraint = or(...orWhere);
+                } else if (andWhere.length > 0) {
+                    filterConstraint = and(...andWhere);
                 }
             }        
-            let constraint = []
-            // add order by
-            if(order){
-                constraint.push(orderBy(order.parameter, order.direction))
-            }
-            // add offset
-            if(offset){
-                const off  =  await getDoc(doc(this.firestorDB!, this.table, offset));
-                constraint.push(startAfter(off))
-            }
-            // add limit
-            if(lim){
-                constraint.push(limit(lim))
-            }
-            // fetch data
-        
-            const snapshot = await getDocs(
-                query(
-                    colRef,
-                    filterConstraint,
-                    ...constraint
-                )
-            )
-            if(!snapshot.empty){
-                this.data = snapshot.docs.map(document=>{
-                    return {...document.data(), reference: document.id}
-                });
-                return true;
-            }else{ return false }
+
+            const nonFilterConstraints: QueryNonFilterConstraint[] = [];
+            if (order) nonFilterConstraints.push(orderBy(order.parameter, order.direction));
             
+            if (offset) {
+                const offDoc = await getDoc(doc(this.firestoreDB, this.table, offset));
+                if (offDoc.exists()) {
+                    nonFilterConstraints.push(startAfter(offDoc));
+                }
+            }
+            if (lim) nonFilterConstraints.push(limit(lim));
+
+            const q = filterConstraint 
+                ? query(colRef, filterConstraint, ...nonFilterConstraints)
+                : query(colRef, ...nonFilterConstraints);
+
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) {
+                this.data = snapshot.docs.map((docItem) => ({ ...docItem.data(), reference: docItem.id }));
+                return true;
+            } else {
+                this.data = [];
+                return false;
+            }
         } catch (error) {
-            throw new Error(`findWhereOrAnd: ${error}`)
+            errorLogger("findWhereOrAnd Error: ", error);
+            throw new Error(`findWhereOrAnd failed: ${error}`);
         }
     }
 
-    /**
-     * complex query with and only
-     * @param param0 
-     * @returns 
-     */
-    async findWhere({wh, lim, order, offset} : {
-        wh?: whereClause[], lim?:number, order?: {
-            parameter: string,
-            direction?: 'asc' | 'desc'
-        }, offset?: string
+    async findWhere({ wh, lim, order, offset }: {
+        wh?: whereClause[]; 
+        lim?: number; 
+        order?: {
+            parameter: string;
+            direction?: 'asc' | 'desc';
+        }; 
+        offset?: string;
     }): Promise<DocumentData[]> {
         try {
-            const whereParameter = wh? wh.map(clause=> where(
-                clause.key, 
-                clause.operator, 
-                clause.value)) : []
-            let constraint: QueryConstraint[] = []
-            // add where parameter
-            if(wh){
-                constraint.push(...whereParameter)
+            const constraints: QueryConstraint[] = wh ? wh.map(clause => where(clause.key, clause.operator, clause.value)) : [];
+
+            if (order) constraints.push(orderBy(order.parameter, order.direction));
+            if (offset) {
+                const offDoc = await getDoc(doc(this.firestoreDB, this.table, offset));
+                if (offDoc.exists()) {
+                    constraints.push(startAfter(offDoc));
+                }
             }
-            // add order by
-            if(order){
-                constraint.push(orderBy(order.parameter, order.direction))
+            if (lim) constraints.push(limit(lim));
+
+            const ref = collection(this.firestoreDB, this.table);
+            const snapshot = await getDocs(query(ref, ...constraints));
+
+            if (!snapshot.empty) {
+                return snapshot.docs.map((docItem) => ({ ...docItem.data(), reference: docItem.id }));
             }
-            // add offset
-            if(offset){
-                const off  =  await getDoc(doc(this.firestorDB!, this.table, offset));
-                constraint.push(startAfter(off))
-            }
-            // add limit
-            if(lim){
-                // 
-                constraint.push(limit(lim))
-            }
-            const ref: CollectionReference<DocumentData> = collection(this.firestorDB!, this.table, )
-        
-            const snapshot = await getDocs(
-                query(
-                    ref,
-                    ...constraint
-                )
-            )
-            if(!snapshot.empty){
-                return snapshot.docs.map(document=>{
-                    return {...document.data(), reference: document.id}
-                })
-            }else{ return [] }
-            
+            return [];
         } catch (error) {
-            throw new Error(`findWhere: , ${error}`)
+            errorLogger("findWhere Error: ", error);
+            throw new Error(`findWhere failed: ${error}`);
         }
     }
 
-    /**
-     * create or update data
-     * @param data 
-     */
-    async save(data: any, id?: string | undefined): Promise<string | boolean> {
-        delete data.reference
+    async save(data: any, id?: string): Promise<string | boolean> {
         try {
-            if(id===undefined){
-                const documentRef = await addDoc(collection(this.firestorDB!, this.table), data)
-                return documentRef.id
+            const payload = { ...sanitizeFirestoreData(data) };
+            delete payload.reference;
+
+            if (id === undefined) {
+                const documentRef = await addDoc(collection(this.firestoreDB, this.table), payload);
+                return documentRef.id;
             } else {
-                await setDoc(doc(this.firestorDB!, this.table, id!), data)
-                return id!
+                await setDoc(doc(this.firestoreDB, this.table, id), payload);
+                return id;
             }
-                    
         } catch (error) {
-            throw new Error(`save error: , ${error}`)
+            errorLogger("save Error: ", error);
+            throw new Error(`save failed: ${error}`);
         }
     }
 
-    /**
-     * Delete document from database
-     * @param id 
-     */
     async delete(id: string): Promise<boolean> {
         try {
-            await deleteDoc(doc(this.firestorDB!, this.table, id))
-            return true
+            await deleteDoc(doc(this.firestoreDB, this.table, id));
+            return true;
         } catch (error) {
-            throw new Error(`delete: , ${error}`)
+            errorLogger("delete Error: ", error);
+            throw new Error(`delete failed: ${error}`);
         }
     }
 
-    /**
-     * Increment or decrement counters
-     * @param param0 
-     */
-    async incrementDecrement({dbReference, key, isIncrement = true, incrementalValue}: 
-        {dbReference: string, key:string, isIncrement?:boolean, incrementalValue?: number}): Promise<boolean>{
-        
-            try {
-                const docRef = doc(this.firestorDB!, this.table, dbReference)
-                const value = isIncrement?incrementalValue??1:(incrementalValue??1) * -1
-                await updateDoc(docRef, {[key]: increment(value)})
-                return true
-            } catch (error) {
-                throw new Error(`incrementDecrement: , ${error}`)
-            }
-    }
-
-    /**
-     * Count data in database
-     * @param {whereClause[]} wh - query parameter (e.g. [
-     * {
-     */
-    async countData(wh: whereClause[]): Promise<number> {
+    async incrementDecrement({ dbReference, key, isIncrement = true, incrementalValue }: {
+        dbReference: string; 
+        key: string; 
+        isIncrement?: boolean; 
+        incrementalValue?: number;
+    }): Promise<boolean> {
         try {
-            
-        // set parameter
-        const qryParameter = wh.map(clause=> where(
-            clause.key, 
-            clause.operator, 
-            clause.value))
+            const docRef = doc(this.firestoreDB, this.table, dbReference);
+            const amount = incrementalValue ?? 1;
+            const value = isIncrement ? amount : -amount;
 
-        const qry = query(
-            collection(this.firestorDB!, this.table),  
-            ...qryParameter
-        )
-        const aggregate = await getCountFromServer(qry)
-        return aggregate.data().count
+            await updateDoc(docRef, { [key]: increment(value) });
+            return true;
         } catch (error) {
-            throw new Error(`countData error: ,${error}`)
+            errorLogger("incrementDecrement Error: ", error);
+            throw new Error(`incrementDecrement failed: ${error}`);
         }
     }
 
-    /**
-     * Get realtime value from database with where clause
-     * @param wh 
-     * @param lim 
-     * @param order 
-     */
+    async countData(wh?: whereClause[]): Promise<number> {
+        try {
+            const qryParameter = wh ? wh.map(clause => where(clause.key, clause.operator, clause.value)) : [];
+            const colRef = collection(this.firestoreDB, this.table);
+
+            const qry = qryParameter.length > 0 ? query(colRef, ...qryParameter) : colRef;
+            const aggregate = await getCountFromServer(qry);
+
+            return aggregate.data().count;
+        } catch (error) {
+            errorLogger("countData Error: ", error);
+            throw new Error(`countData failed: ${error}`);
+        }
+    }
+
     async streamCount(
         wh: whereClause[],
         callBack: (data: number) => void,
         order?: { parameter: string; direction?: 'asc' | 'desc' },
         offset?: string
-        ): Promise<() => void> {
+    ): Promise<Unsubscribe> {
         try {
-            const whereParameter = wh.map(clause =>
-            where(clause.key, clause.operator, clause.value)
-            );
+            const constraints: QueryConstraint[] = wh.map(clause => where(clause.key, clause.operator, clause.value));
 
-            const constraint: QueryConstraint[] = [...whereParameter];
-
-            if (order) constraint.push(orderBy(order.parameter, order.direction));
+            if (order) constraints.push(orderBy(order.parameter, order.direction));
             if (offset) {
-            const off = await getDoc(doc(this.firestorDB!, this.table, offset));
-                constraint.push(startAfter(off));
+                const offDoc = await getDoc(doc(this.firestoreDB, this.table, offset));
+                if (offDoc.exists()) {
+                    constraints.push(startAfter(offDoc));
+                }
             }
 
-            const streamerConstraint = [...constraint, limit(1)];
-            const ref: CollectionReference<DocumentData> = collection(this.firestorDB!, this.table);
+            const streamerConstraint = [...constraints, limit(1)];
+            const ref = collection(this.firestoreDB, this.table);
 
-            const unsubscribe = onSnapshot(
-            query(ref, ...streamerConstraint),
-            async (snapShot) => {
-                if (snapShot.empty) return;
-                const aggregate = await getCountFromServer(query(
-                collection(this.firestorDB!, this.table),
-                ...constraint
-                ));
-                callBack(aggregate.data().count);
-            }
+            return onSnapshot(
+                query(ref, ...streamerConstraint),
+                async () => {
+                    const aggregate = await getCountFromServer(query(ref, ...constraints));
+                    callBack(aggregate.data().count);
+                },
+                (error) => {
+                    errorLogger("streamCount listener error: ", error);
+                }
             );
-
-            return unsubscribe;
-
         } catch (error) {
-            throw new Error(`streamCount: ${error}`);
+            errorLogger("streamCount Error: ", error);
+            throw new Error(`streamCount failed: ${error}`);
         }
     }
-
 }
