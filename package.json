@@ -1,20 +1,19 @@
 {
   "name": "firebase-client-ql",
-  "version": "9.0.2",
-  "description": "firebase library for SQL users",
-  "main": "dist/index.js",
-  "module": "esm/index.js",
-  "types": "dist/index.d.ts",
+  "version": "11.0.0",
+  "description": "A lightweight, SQL-like query interface and object-relational abstraction layer for Firebase Firestore on the client.",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./esm/index.js",
+      "import": "./dist/index.mjs",
       "require": "./dist/index.js"
     }
   },
   "files": [
-    "dist",
-    "esm"
+    "dist"
   ],
   "repository": {
     "type": "git",
@@ -24,14 +23,12 @@
   "license": "MIT",
   "private": false,
   "peerDependencies": {
-    "firebase": ">=12"
+    "firebase": "^10.0.0 || ^11.0.0 || ^12.0.0"
   },
   "scripts": {
-    "clean": "rimraf dist esm",
+    "clean": "rimraf dist",
     "prebuild": "npm run clean",
-    "build": "npm run build:esm && npm run build:cjs",
-    "build:cjs": "tsc -p tsconfig.cjs.json",
-    "build:esm": "tsc -p tsconfig.esm.json",
+    "build": "tsup",
     "preversion": "npm run build",
     "postversion": "git push --follow-tags",
     "prepublishOnly": "npm run build"
@@ -39,6 +36,7 @@
   "devDependencies": {
     "rimraf": "^5.0.1",
     "source-map-loader": "^4.0.1",
+    "tsup": "^8.0.0",
     "typescript": "^5.1.6"
   }
 }

@@ -1,4 +1,4 @@
-import { FirebaseApp } from "@firebase/app";
+import { FirebaseApp, FirebaseError } from "@firebase/app";
 import { 
     Firestore, 
     DocumentData, 
@@ -30,6 +30,7 @@ import {
     arrayUnion,
     arrayRemove,
     Unsubscribe,
+    getFirestore,
 } from "firebase/firestore";
 import { Model } from "./ModelInterface";
 import { andOrWhereClause, dbItems, whereClause } from "./constants";
@@ -42,11 +43,14 @@ export class BaseModel implements Model {
     data: any;
 
     private firestoreDB: Firestore;
-    private table: string = '';
+    private table: string;
     private app: FirebaseApp;
     private functionRegion?: string;
 
-    constructor(table: string, app: FirebaseApp, db: Firestore, functionRegion?: string){
+    constructor(table: string, db: Firestore, app: FirebaseApp, functionRegion?: string) {
+        if (!table) throw new Error(`[BaseModel Error]: Table name was undefined.`);
+        if (!db) throw new Error(`[BaseModel Error]: Firestore instance passed to table '${table}' is undefined or invalid.`);
+
         this.table = table;
         this.firestoreDB = db;
         this.app = app;
@@ -110,7 +114,7 @@ export class BaseModel implements Model {
             return true;
         } catch (error) {
             errorLogger("saveBatch Error: ", error);
-            throw new Error(`saveBatch failed: ${error}`);
+            throw new Error(`saveBatch failed: ${error} table: ${this.table} db: ${this.firestoreDB}`);
         }
     }
 
@@ -142,7 +146,7 @@ export class BaseModel implements Model {
             return true;
         } catch (error) {
             errorLogger("updateBatch Error: ", error);
-            throw new Error(`updateBatch failed: ${error}`);
+            throw new Error(`updateBatch failed: ${error} table: ${this.table} db: ${this.firestoreDB}`);
         }
     }
 
@@ -165,7 +169,7 @@ export class BaseModel implements Model {
             return true;
         } catch (error) {
             errorLogger("deleteBatch Error: ", error);
-            throw new Error(`deleteBatch failed: ${error}`);
+            throw new Error(`deleteBatch failed: ${error} table: ${this.table} db: ${this.firestoreDB}`);
         }
     }
 
@@ -240,7 +244,7 @@ export class BaseModel implements Model {
             );
         } catch (error) {
             errorLogger("streamWhere execution error: ", error);
-            throw new Error(`streamWhere failed: ${error}`);
+            throw new Error(`streamWhere failed: ${error} table: ${this.table} db: ${this.firestoreDB}`);
         }
     }
 
@@ -256,7 +260,7 @@ export class BaseModel implements Model {
             return false;
         } catch (error) {
             errorLogger("find Error: ", error);
-            throw new Error(`find failed: ${error}`);
+            throw new Error(`find failed: ${error} table: ${this.table} db: ${this.firestoreDB}`);
         }
     }
 
@@ -267,7 +271,7 @@ export class BaseModel implements Model {
             return docSnap.exists();
         } catch (error) {
             errorLogger("dataExists Error: ", error);
-            throw new Error(`dataExists failed: ${error}`);
+            throw new Error(`dataExists failed: ${error} table: ${this.table} db: ${this.firestoreDB}`);
         }
     }
 
@@ -281,7 +285,7 @@ export class BaseModel implements Model {
             return true;
         } catch (error) {
             errorLogger("update Error: ", error);
-            throw new Error(`update failed: ${error}`);
+            throw new Error(`update failed: ${error} table: ${this.table} db: ${this.firestoreDB}`);
         }
     }
 
@@ -292,7 +296,7 @@ export class BaseModel implements Model {
             return true;
         } catch (error) {
             errorLogger("updateAtomicArray Error: ", error);
-            throw new Error(`updateAtomicArray failed: ${error}`);
+            throw new Error(`updateAtomicArray failed: ${error} table: ${this.table} db: ${this.firestoreDB}`);
         }
     }
 
@@ -303,7 +307,7 @@ export class BaseModel implements Model {
             return true;
         } catch (error) {
             errorLogger("removeFromArray Error: ", error);
-            throw new Error(`removeFromArray failed: ${error}`);
+            throw new Error(`removeFromArray failed: ${error} table: ${this.table} db: ${this.firestoreDB}`);
         }
     }
 
@@ -332,7 +336,7 @@ export class BaseModel implements Model {
             }
         } catch (error) {
             errorLogger("findAll Error: ", error);
-            throw new Error(`findAll failed: ${error}`);
+            throw new Error(`findAll failed: ${error} table: ${this.table} db: ${this.firestoreDB}`);
         }
     }
 
@@ -394,7 +398,7 @@ export class BaseModel implements Model {
             }
         } catch (error) {
             errorLogger("findWhereOrAnd Error: ", error);
-            throw new Error(`findWhereOrAnd failed: ${error}`);
+            throw new Error(`findWhereOrAnd failed: ${error} table: ${this.table} db: ${this.firestoreDB}`);
         }
     }
 
@@ -428,7 +432,7 @@ export class BaseModel implements Model {
             return [];
         } catch (error) {
             errorLogger("findWhere Error: ", error);
-            throw new Error(`findWhere failed: ${error}`);
+            throw new Error(`findWhere failed: ${error} table: ${this.table} db: ${this.firestoreDB}`);
         }
     }
 
@@ -446,7 +450,7 @@ export class BaseModel implements Model {
             }
         } catch (error) {
             errorLogger("save Error: ", error);
-            throw new Error(`save failed: ${error}`);
+            throw new Error(`save failed: ${error} table: ${this.table} db: ${this.firestoreDB}`);
         }
     }
 
@@ -456,7 +460,7 @@ export class BaseModel implements Model {
             return true;
         } catch (error) {
             errorLogger("delete Error: ", error);
-            throw new Error(`delete failed: ${error}`);
+            throw new Error(`delete failed: ${error} table: ${this.table} db: ${this.firestoreDB}`);
         }
     }
 
@@ -475,7 +479,7 @@ export class BaseModel implements Model {
             return true;
         } catch (error) {
             errorLogger("incrementDecrement Error: ", error);
-            throw new Error(`incrementDecrement failed: ${error}`);
+            throw new Error(`incrementDecrement failed: ${error} table: ${this.table} db: ${this.firestoreDB}`);
         }
     }
 
@@ -490,7 +494,7 @@ export class BaseModel implements Model {
             return aggregate.data().count;
         } catch (error) {
             errorLogger("countData Error: ", error);
-            throw new Error(`countData failed: ${error}`);
+            throw new Error(`countData failed: ${error} table: ${this.table} db: ${this.firestoreDB}`);
         }
     }
 
@@ -526,7 +530,7 @@ export class BaseModel implements Model {
             );
         } catch (error) {
             errorLogger("streamCount Error: ", error);
-            throw new Error(`streamCount failed: ${error}`);
+            throw new Error(`streamCount failed: ${error} table: ${this.table} db: ${this.firestoreDB}`);
         }
     }
 }
